@@ -5,14 +5,15 @@ set -e
 APK_URL="https://hermivore.cat/cdn/swan/changeinvalue"
 WORK_DIR="/config/android"
 APK_PATH="/config/roblox.apk"
-# Bliss OS 15.8.6 Vanilla
-BLISS_ISO_URL="https://sourceforge.net/projects/blissos-dev/files/Beta/Bliss-v15.8.6-x86_64-OFFICIAL-vanilla-20230628.iso/download"
+# Bliss OS 14 (Android 11) - stable virtio-gpu & libndk ARM translation
+BLISS_ISO_URL="https://sourceforge.net/projects/blissos-dev/files/Android-Generic/PC/gearlock/11/Bliss-OS-14.10-x86_64-20230718.iso/download"
 ADB_PORT=5555
 
 echo "=========================================="
 echo "[1/5] Installing Arch & QEMU Packages"
 echo "=========================================="
-pacman -Syu --noconfirm --needed qemu-desktop qemu-ui-gtk android-tools wget curl aapt
+
+pacman -Syu --noconfirm --needed qemu-desktop qemu-ui-gtk android-tools wget curl unzip
 
 # Ensure KVM permissions
 if [ -e /dev/kvm ]; then
@@ -46,14 +47,11 @@ curl -L --progress-bar -o "$APK_PATH" "$APK_URL"
 chmod 644 "$APK_PATH"
 
 echo "=========================================="
-echo "[4/5] Launching Android with Full Logs & VirtIO"
+echo "[4/5] Launching Android with VirtIO-GPU"
 echo "=========================================="
 killall -9 qemu-system-x86_64 2>/dev/null || true
 
-# Execute QEMU:
-# - Uses virtio-gpu-pci for proper Android SurfaceFlinger hardware composer support
-# - Routes VM serial console directly to this terminal (-serial mon:stdio) for kernel logs
-# - Routes GUI display to Webtop desktop (:1)
+# Launch QEMU with virtio-gpu and serial redirected
 runuser -u abc -- env DISPLAY=:1 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 \
 qemu-system-x86_64 \
   -enable-kvm \
@@ -90,9 +88,7 @@ echo "[*] Android userland fully online."
 echo "[*] Installing APK: $APK_PATH..."
 adb -s 127.0.0.1:${ADB_PORT} install -r -g "$APK_PATH"
 
-echo "[*] Identifying launch activity..."
-PACKAGE_NAME=$(aapt dump badging "$APK_PATH" 2>/dev/null | awk -F"'" '/package: name=/{print $2}')
-[ -z "$PACKAGE_NAME" ] && PACKAGE_NAME="com.roblox.client"
+PACKAGE_NAME="com.roblox.client"
 
 echo "[*] Starting $PACKAGE_NAME..."
 adb -s 127.0.0.1:${ADB_PORT} shell monkey -p "$PACKAGE_NAME" -c android.intent.category.LAUNCHER 1
